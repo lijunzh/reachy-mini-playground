@@ -11,6 +11,9 @@ __pycache__/
 .pytest_cache/
 .ruff_cache/
 
+# Daemon-generated runtime state
+.app_metadata/
+
 # Logs / scratch
 *.log
 
