@@ -4,7 +4,8 @@ Local development against the [Reachy Mini](https://huggingface.co/docs/reachy_m
 simulator. No physical robot required: in sim the daemon presents itself as a Reachy Mini
 Lite on `localhost`, so SDK scripts run unmodified on real hardware later.
 
-Host this was set up on: macOS (Apple Silicon), Python 3.12, `reachy-mini` 1.9.0, `mujoco` 3.3.0.
+Host this was set up on: macOS (Apple Silicon), Python 3.12, `reachy-mini` 1.10.0rc5,
+`mujoco` 3.3.0.
 
 ## Setup
 
@@ -74,3 +75,43 @@ does *not* stop it; only `--headless` does, since the camera thread is gated on 
 
 **Do not name your own package `reachy_mini`.** A `reachy_mini/` directory or
 `reachy_mini.py` file in the working directory shadows the installed SDK and breaks imports.
+
+## Apps
+
+Install official apps through the daemon API (or Reachy Mini Control). Run the daemon with
+`--desktop-app-daemon` so apps install into a sibling `apps_venv/` instead of mutating this
+environment:
+
+```bash
+mjpython -m reachy_mini.daemon.app.main --sim --desktop-app-daemon
+curl -X POST http://127.0.0.1:8000/api/apps/start-app/<app_name>
+```
+
+The conversation app's web UI is then at http://127.0.0.1:7860/. First start takes ~75 s
+(fresh GStreamer registry scan in `apps_venv`).
+
+### Known upstream bug: env leak into app subprocesses
+
+`AppManager.start_app` scrubs `GST_*`/`XDG_*` from the app subprocess env but **not**
+`PYTHONPATH` or `GST_PYTHONPATH_1_0`, both of which the daemon's `gstreamer_bundle.pth`
+points at the *daemon's* site-packages. Because they take precedence over the target venv,
+an app launched with `apps_venv`'s interpreter imports `reachy_mini` and `gi` from the
+daemon's venv instead. Confirmed present in 1.10.0rc5.
+
+This is invisible while the daemon and `apps_venv` hold the *same* SDK version — which is
+why this project pins both to 1.10.0rc5. It bites as soon as they diverge, with either:
+
+```
+ModuleNotFoundError: No module named 'reachy_mini.io.jsonrpc'   # PYTHONPATH leak
+ModuleNotFoundError: No module named 'gi'                        # GST_PYTHONPATH_1_0 leak
+```
+
+Two ways out. Run the app directly, bypassing the daemon launcher:
+
+```bash
+env -u PYTHONPATH -u GST_PYTHONPATH_1_0 ./apps_venv/bin/reachy-mini-conversation-app --ui
+```
+
+Or add both names to the scrub tuple in
+`reachy_mini_env/lib/python3.12/site-packages/reachy_mini/apps/manager.py` (verified to
+work, but a local edit that any `pip install -U reachy-mini` will silently revert).

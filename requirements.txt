@@ -2,4 +2,8 @@
 #
 # macOS: install with pip *inside* the venv, not `uv pip` — the upstream docs
 # warn that uv has compatibility issues with MuJoCo on macOS. See README.md.
-reachy-mini[mujoco]==1.9.0
+# Pinned to a pre-release: the official conversation app requires
+# reachy-mini>=1.10.0rc2, and 1.10.0 has no stable release yet (1.9.0 is the
+# newest stable). Matching the daemon to the app avoids a version-mismatch
+# warning and a latent env-leak bug — see README.
+reachy-mini[mujoco]==1.10.0rc5
