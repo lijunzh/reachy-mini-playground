@@ -1,5 +1,6 @@
-# Virtual environment (1.4 GB — never commit)
+# Virtual environments (never commit)
 reachy_mini_env/
+apps_venv/
 .venv/
 venv/
 
