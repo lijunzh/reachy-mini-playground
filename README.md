@@ -9,13 +9,35 @@ Host this was set up on: macOS (Apple Silicon), Python 3.12, `reachy-mini` 1.10.
 
 ## Setup
 
+On a fresh macOS machine, install [uv](https://docs.astral.sh/uv/) and Git LFS, then run
+the setup script — it creates the venv, installs everything, applies both macOS fixes
+below, and verifies the result. It is idempotent, so re-running it is safe.
+
+```bash
+brew install git git-lfs
+curl -LsSf https://astral.sh/uv/install.sh | sh
+
+git clone https://github.com/lijunzh/reachy-mini-playground.git
+cd reachy-mini-playground
+./setup.sh
+```
+
+The venv is deliberately not in git: it is 1.4 GB, macOS/arm64-only, and hardcodes
+absolute paths in its console-script shebangs and `pyvenv.cfg`, so a copied venv breaks on
+any other machine. `requirements.txt` plus this script is the reproducible part.
+
+<details>
+<summary>Manual equivalent, if you prefer not to run the script</summary>
+
 ```bash
 uv venv reachy_mini_env --python 3.12 --seed
 ./reachy_mini_env/bin/pip install -r requirements.txt
 ```
 
 Use `pip` from inside the venv rather than `uv pip` — the upstream docs warn that uv has
-compatibility issues with MuJoCo on macOS.
+compatibility issues with MuJoCo on macOS. Then apply both fixes below.
+
+</details>
 
 ### macOS fix required after creating the venv
 
