@@ -1,0 +1,17 @@
+# Virtual environment (1.4 GB — never commit)
+reachy_mini_env/
+.venv/
+venv/
+
+# Python
+__pycache__/
+*.py[cod]
+*.egg-info/
+.pytest_cache/
+.ruff_cache/
+
+# Logs / scratch
+*.log
+
+# macOS
+.DS_Store
