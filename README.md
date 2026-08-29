@@ -277,9 +277,12 @@ before the first start — without it, the service would silently run with the c
 Verified: a bare `omlx serve` with no flags reports `cached=6144` and 0.58 s/turn,
 identical to the flag-driven run.
 
-> **One settings file, last writer wins.** `~/.omlx/settings.json` is global. Two oMLX
-> installs (say Homebrew and a pip wheel) overwrite each other's port and cache
-> directory. Run one.
+> **Homebrew is the only supported install path.** oMLX also ships pip wheels, but
+> `~/.omlx/settings.json` is global and last-writer-wins: a second install silently
+> overwrites the first one's port and cache directory. `setup-llm-server.sh` refuses to
+> run if a non-Homebrew `omlx` shadows the Homebrew one. Homebrew is also what provides
+> `brew services` (auto-restart, managed logs) and `brew upgrade`, which a wheel install
+> cannot.
 
 **Monitoring.** The CLI server serves a web console at http://127.0.0.1:8123/admin —
 logs, metrics, throughput, cache and batch state, and one-click benchmarking. Set an API

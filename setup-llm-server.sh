@@ -18,8 +18,21 @@ fail() { printf '\033[1;31merror:\033[0m %s\n' "$1" >&2; exit 1; }
 [ "$(uname -m)" = "arm64" ] || fail "Apple Silicon required."
 command -v brew >/dev/null 2>&1 || fail "Homebrew not found: https://brew.sh"
 
-if command -v omlx >/dev/null 2>&1 || [ -x /opt/homebrew/opt/omlx/bin/omlx ]; then
-    info "omlx already installed"
+# Homebrew is the only supported install path. oMLX also publishes pip wheels,
+# but a second install is actively harmful: ~/.omlx/settings.json is global and
+# last-writer-wins, so two installs silently overwrite each other's port and
+# cache directory. Refuse to proceed if a non-Homebrew omlx shadows this one.
+FOUND=$(command -v omlx 2>/dev/null || true)
+case "$FOUND" in
+    ""|"$(brew --prefix)"/*) ;;
+    *) fail "a non-Homebrew omlx is first on PATH: $FOUND
+This repo supports the Homebrew install only. Two installs share
+~/.omlx/settings.json and overwrite each other's port and cache directory.
+Remove the other one (e.g. 'pip uninstall omlx' in its venv) and re-run." ;;
+esac
+
+if [ -n "$FOUND" ] || [ -x /opt/homebrew/opt/omlx/bin/omlx ]; then
+    info "omlx already installed (Homebrew)"
 else
     info "Installing omlx from the jundot/omlx tap (~3.6 GB, compiles Rust)"
     # The mlx-audio resource is a git clone that can stall; make git give up and
