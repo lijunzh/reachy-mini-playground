@@ -22,7 +22,7 @@ fail() { printf '\033[1;31merror:\033[0m %s\n' "$1" >&2; exit 1; }
 # --- 1. prerequisites -------------------------------------------------------
 info "Checking prerequisites"
 
-[ "$(uname -s)" = "Darwin" ] || fail "This script targets macOS. On Linux, skip the dylib fixes below and install GStreamer via your package manager."
+[ "$(uname -s)" = "Darwin" ] || fail "macOS only."
 
 command -v uv >/dev/null 2>&1 || fail "uv not found. Install it with:
     curl -LsSf https://astral.sh/uv/install.sh | sh"

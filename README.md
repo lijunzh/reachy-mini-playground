@@ -4,8 +4,9 @@ Local development against the [Reachy Mini](https://huggingface.co/docs/reachy_m
 simulator. No physical robot required: in sim the daemon presents itself as a Reachy Mini
 Lite on `localhost`, so SDK scripts run unmodified on real hardware later.
 
-Host this was set up on: macOS (Apple Silicon), Python 3.12, `reachy-mini` 1.10.0rc5,
-`mujoco` 3.3.0.
+**macOS (Apple Silicon) only.** The scripts refuse to run elsewhere: `mjpython` needs a
+macOS-specific dylib fix, and the local conversation backend pulls MLX, which has no Intel
+build. Python 3.12, `reachy-mini` 1.10.0rc5, `mujoco` 3.3.0.
 
 ## Setup
 

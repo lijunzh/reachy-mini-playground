@@ -18,6 +18,10 @@ fail() { printf '\033[1;31merror:\033[0m %s\n' "$1" >&2; exit 1; }
 LOCKED=0
 [ "${1:-}" = "--locked" ] && LOCKED=1
 
+[ "$(uname -s)" = "Darwin" ] || fail "macOS only."
+# speech-to-speech pulls MLX for on-GPU STT/TTS; mlx-metal has no Intel build.
+[ "$(uname -m)" = "arm64" ] || fail "Apple Silicon required (MLX has no Intel build)."
+
 command -v uv >/dev/null 2>&1 || fail "uv not found. Install: curl -LsSf https://astral.sh/uv/install.sh | sh"
 
 if [ -d "$VENV" ]; then
