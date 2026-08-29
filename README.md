@@ -242,11 +242,50 @@ completions. LM Studio does. `mlx_lm.server` does **not** — it exposes only
 LM Studio runs MLX models natively, so prefer an MLX build of your model over swapping
 servers.
 
-`--responses_api_disable_thinking` matters for reasoning models: without it Qwen3 spends
-most of its token budget on reasoning, adding dead air to every spoken turn.
+**Use a non-reasoning (instruct) model.** This matters more than any flag.
+`--responses_api_disable_thinking` sends `chat_template_kwargs.enable_thinking=false`,
+which vLLM honours but **LM Studio's llama.cpp backend ignores**. Measured against
+LM Studio with `qwen/qwen3.8-27b`:
+
+| Request | reasoning tokens |
+| --- | --- |
+| baseline | 29 |
+| `chat_template_kwargs.enable_thinking=false` (what the flag sends) | 15 |
+| `reasoning_effort: "none"` | 11 |
+
+Never zero. A realistic conversational turn came back with **180 of 211 tokens spent on
+reasoning, taking 15.2 s** before the first spoken word. The flag is left in
+`run-local-backend.sh` because it costs nothing and works against vLLM-style servers, but
+do not rely on it with LM Studio.
 
 Watch `Qwen3-TTS RTF` in the logs. Above 1.0 means synthesis is slower than realtime and
 replies will lag; STT and TTS share an MLX lock and compete with the LLM for the GPU.
+
+### Troubleshooting: Reachy never answers
+
+Symptoms in the speech-to-speech log:
+
+```
+speech during pending response: cancelled, queue flushed
+LLM generation cancelled (interruption)
+Skipping stale LLM request for turn=turn_15 rev=10
+```
+
+with the same sentence re-transcribed several times on a growing buffer
+(`audio=2.984s` then `4.764s`, `rev=0,1,2...`).
+
+The LLM is not looping and LM Studio is not stuck. The *turn* never closes: any sound
+during the 800 ms speculative reopen grace reopens it, Parakeet re-transcribes the whole
+buffer, and the in-flight LLM request is abandoned. A slow model never wins that race, so
+the reply is generated and then thrown away.
+
+Fixes, most effective first:
+
+1. Switch to a smaller non-reasoning model — this removes ~85% of generated tokens and
+   brings replies inside the window before the turn reopens.
+2. Raise the VAD threshold (`--thresh`) so ambient noise stops reopening turns.
+3. Verify the model is not the bottleneck by calling it directly; if a plain
+   `POST /v1/responses` takes >5 s, no amount of VAD tuning will help.
 
 ## Apps
 

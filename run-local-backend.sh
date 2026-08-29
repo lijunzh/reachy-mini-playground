@@ -36,8 +36,11 @@ echo "==> serve: ws://$WS_HOST:$WS_PORT/v1/realtime  (stt=$STT tts=$TTS)"
 echo "    First run downloads ~2.5 GB of weights. Wait for:"
 echo "    'OpenAI Realtime API starting on ws://$WS_HOST:$WS_PORT/v1/realtime'"
 
-# --responses_api_disable_thinking: reasoning models otherwise spend most of the
-# token budget on reasoning, adding dead air to every spoken turn.
+# --responses_api_disable_thinking sends chat_template_kwargs.enable_thinking=false.
+# vLLM-style servers honour it; LM Studio's llama.cpp backend ignores it, so a
+# reasoning model still reasons (measured: 180 of 211 tokens, 15.2s per turn) and
+# the turn gets cancelled before it finishes. Use an instruct model instead.
+# See README, "Troubleshooting: Reachy never answers".
 exec ./s2s_venv/bin/speech-to-speech \
     --model_name "$LLM_MODEL" \
     --responses_api_base_url "$LLM_BASE_URL" \
