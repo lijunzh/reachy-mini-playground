@@ -12,3 +12,13 @@ LLM_API_KEY="lm-studio"
 # WS_PORT="8765"
 # STT="parakeet-tdt"
 # TTS="qwen3"
+
+# --- Backend selection ------------------------------------------------------
+# responses-api    : LM Studio (implements /v1/responses)
+# chat-completions : omlx, mlx_lm.server (no /v1/responses)
+#
+# omlx is markedly faster at Reachy's real context size (~9k tokens/turn)
+# because of its prefix cache -- see README, "Which LLM server".
+# LLM_BACKEND="chat-completions"
+# LLM_BASE_URL="http://127.0.0.1:8123/v1"
+# LLM_MODEL="Qwen3-Coder-Next-MLX-4bit"

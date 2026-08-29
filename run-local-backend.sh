@@ -10,6 +10,8 @@ cd "$(dirname "$0")"
 LLM_MODEL="qwen/qwen3.8-27b"
 LLM_BASE_URL="http://127.0.0.1:1234/v1"
 LLM_API_KEY="lm-studio"
+# responses-api (LM Studio) or chat-completions (omlx, mlx_lm.server).
+LLM_BACKEND="responses-api"
 WS_HOST="127.0.0.1"
 WS_PORT="8765"
 STT="parakeet-tdt"
@@ -31,7 +33,7 @@ if ! curl -sf -m 5 "${LLM_BASE_URL%/v1}/v1/models" >/dev/null 2>&1; then
     exit 1
 fi
 
-echo "==> LLM  : $LLM_MODEL via $LLM_BASE_URL"
+echo "==> LLM  : $LLM_MODEL via $LLM_BASE_URL  (backend=$LLM_BACKEND)"
 echo "==> serve: ws://$WS_HOST:$WS_PORT/v1/realtime  (stt=$STT tts=$TTS)"
 echo "    First run downloads ~2.5 GB of weights. Wait for:"
 echo "    'OpenAI Realtime API starting on ws://$WS_HOST:$WS_PORT/v1/realtime'"
@@ -42,6 +44,7 @@ echo "    'OpenAI Realtime API starting on ws://$WS_HOST:$WS_PORT/v1/realtime'"
 # the turn gets cancelled before it finishes. Use an instruct model instead.
 # See README, "Troubleshooting: Reachy never answers".
 exec ./s2s_venv/bin/speech-to-speech \
+    --llm_backend "$LLM_BACKEND" \
     --model_name "$LLM_MODEL" \
     --responses_api_base_url "$LLM_BASE_URL" \
     --responses_api_api_key "$LLM_API_KEY" \

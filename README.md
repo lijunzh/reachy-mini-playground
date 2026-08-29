@@ -236,45 +236,80 @@ The installed CLI has **no `serve` subcommand**, despite what the upstream READM
 that is only on `main`. Passing it fails with
 `Some specified arguments are not used by the HfArgumentParser: ['serve']`.
 
-**Picking an LLM server.** `speech-to-speech` defaults to the Responses API
-(`/v1/responses`), which LM Studio implements. Servers that only speak chat completions
-still work — select them explicitly:
+### Which LLM server
+
+`speech-to-speech` defaults to the Responses API (`/v1/responses`), which LM Studio
+implements. Servers that only speak chat completions work too — set `LLM_BACKEND` in
+`local-backend.conf`:
 
 ```bash
---llm_backend chat-completions --responses_api_base_url http://127.0.0.1:8123/v1
+LLM_BACKEND="chat-completions"          # omlx, mlx_lm.server
+LLM_BASE_URL="http://127.0.0.1:8123/v1"
 ```
 
-`--llm_backend` accepts `transformers`, `mlx-lm`, `responses-api` (default), and
-`chat-completions`; the `chat-completions` backend reuses the same
-`--responses_api_base_url` / `--responses_api_api_key` flags and adds
-`--responses_api_reasoning_effort` for providers that ignore
-`chat_template_kwargs.enable_thinking`. So `omlx` and `mlx_lm.server`, which expose no
-`/v1/responses`, are usable via that backend.
+`--llm_backend` accepts `transformers`, `mlx-lm`, `responses-api` (default) and
+`chat-completions`; the chat-completions backend reuses the same
+`--responses_api_base_url` / `--responses_api_api_key` flags.
 
-**But the server is not what makes this fast — the model is.** Measured on this machine
-with identical prompts (`bench-llm.py`, 3 conversational turns, warm):
+**Context size decides which server to use.** The conversation app sends a large stable
+prefix — instructions plus tool schemas plus growing history. Measured from a real
+session's own accounting:
 
-| Server | Model | avg/turn | tok/s | reasoning |
+```
+this response: input_tokens=8879 / 8937 / 8979 / 9341
+```
+
+**~9,000 tokens per turn.** At that size a prefix cache dominates everything else.
+Same model (`Qwen3-Coder-Next-MLX-4bit`), same prompts, 6,656-token context:
+
+| Server | req 1 | req 2 | req 3 | cached tokens |
 | --- | --- | --- | --- | --- |
-| LM Studio | `qwen3.8-27b` (GGUF, reasoning) | 13.2 s | 12.4 | 86% |
-| LM Studio | `Qwen3-Coder-Next` (MLX) | **0.8 s** | 51.7 | 0% |
-| omlx | `Qwen3-Coder-Next` (MLX) | 1.0 s | 32.1 | 0% |
+| **omlx** (prefix cache on) | **1.01 s** | **0.58 s** | **0.58 s** | 6144 |
+| LM Studio | 5.66 s | 5.15 s | 5.13 s | none |
 
-Two conclusions. Switching from a reasoning to a non-reasoning model was worth ~16x;
-switching servers was worth nothing — on identical weights LM Studio matched or beat omlx
-when warm (omlx does load models faster from cold: 9.4 s vs 21.3 s). Installing omlx is
-not necessary: LM Studio runs MLX models natively, so load an MLX instruct build there and
-set `LLM_MODEL` in `local-backend.conf`.
+omlx is roughly **9x faster per turn**: LM Studio re-prefills all 6,656 tokens on every
+request, omlx serves them from cache. Prefer **omlx for the conversation app.**
 
-Re-run the comparison yourself against any model with `bench-llm.py`:
+Two things make this easy to measure wrong:
+
+- omlx caches in **2048-token blocks**. Below ~2048 tokens nothing is cacheable and omlx
+  looks no better than LM Studio (at ~700-token prompts LM Studio is actually ahead,
+  0.46 s vs 1.03 s per turn). Benchmark at your real context size or the result is
+  meaningless.
+- The cache is **off by default**. Without `--paged-ssd-cache-dir` omlx reports
+  `cached=0` and the feature does nothing.
+
+Start omlx with caching enabled, on a port other than 8000 (the Reachy daemon's):
+
+```bash
+omlx serve --model-dir ~/.lmstudio/models --host 127.0.0.1 --port 8123 \
+  --paged-ssd-cache-dir ~/.omlx/cache --paged-ssd-cache-max-size 20GB \
+  --hot-cache-max-size 8GB
+```
+
+`--hot-cache-max-size 20%` from omlx's README is rejected — it wants an absolute size.
+
+**Check LM Studio's loaded context if you stay with it.** It defaults well below what the
+app sends; at ~9k tokens it refuses the request outright:
+
+```
+HTTP 400: The number of tokens to keep from the initial prompt is greater than
+          the context length. Try to load the model with a larger context length
+```
+
+Its `loaded_context_length` was 8192 against a model maximum of 262144.
+
+**Model choice still matters more than either server for reasoning models.** A reasoning
+model spends most of its budget thinking (measured: 86% of tokens, 13.2 s/turn on
+`qwen3.8-27b`); a non-reasoning model of the same family answers in under a second.
+Use an instruct build.
+
+Re-run any of this with `bench-llm.py` (single turns) — and benchmark at your real
+context size, not a toy prompt:
 
 ```bash
 ./reachy_mini_env/bin/python bench-llm.py "LM Studio" http://127.0.0.1:1234/v1 <model-id> --chat
 ```
-
-Run it twice — the first turn includes model load, so compare the warm numbers.
-
-If you do run omlx, give it a port other than 8000 — that is the Reachy daemon's.
 
 **Use a non-reasoning (instruct) model.** This matters more than any flag.
 `--responses_api_disable_thinking` sends `chat_template_kwargs.enable_thinking=false`,
@@ -315,11 +350,12 @@ the reply is generated and then thrown away.
 
 Fixes, most effective first:
 
-1. Switch to a smaller non-reasoning model — this removes ~85% of generated tokens and
-   brings replies inside the window before the turn reopens.
-2. Raise the VAD threshold (`--thresh`) so ambient noise stops reopening turns.
-3. Verify the model is not the bottleneck by calling it directly; if a plain
-   `POST /v1/responses` takes >5 s, no amount of VAD tuning will help.
+1. Switch to a non-reasoning (instruct) model — removes ~85% of generated tokens.
+2. Use a server with a prefix cache. At the app's real ~9k-token context this is worth
+   ~9x on its own; see "Which LLM server" above.
+3. Raise the VAD threshold (`--thresh`) so ambient noise stops reopening turns.
+4. Verify the model is not the bottleneck by calling it directly at your real context
+   size; if a single request takes >5 s, no amount of VAD tuning will help.
 
 ## Apps
 
