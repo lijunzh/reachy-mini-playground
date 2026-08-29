@@ -416,6 +416,51 @@ nothing to do.
 The conversation app's web UI is then at http://127.0.0.1:7860/. First start takes ~75 s
 (fresh GStreamer registry scan in `apps_venv`).
 
+### After an SDK bump, realign apps_venv explicitly
+
+`install-app.sh` will **not** upgrade a dependency that is already satisfied. After
+bumping `reachy-mini` in the daemon venv, reinstalling the app leaves `apps_venv` on the
+old SDK, because the old version still satisfies the app's lower bound. A fresh clone
+resolves correctly only because its `apps_venv` starts empty.
+
+The symptom is the app logging, on startup:
+
+```
+RuntimeWarning: Reachy Mini SDK and daemon versions do not match:
+SDK=<old>, daemon=<new>. Running different versions can create issues.
+```
+
+Fix it in the app's own venv, matching whatever `requirements.txt` pins:
+
+```bash
+./apps_venv/bin/pip install --upgrade "reachy-mini==1.10.0" "mcp==1.29.1"
+```
+
+Check alignment with:
+
+```bash
+./reachy_mini_env/bin/python -c "import importlib.metadata as m; print(m.version('reachy-mini'))"
+./apps_venv/bin/python       -c "import importlib.metadata as m; print(m.version('reachy-mini'))"
+```
+
+### `state: running` does not mean the backend connected
+
+`/api/apps/current-app-status` reports whether the app *process* is alive, not whether it
+reached its realtime backend. With `speech-to-speech` down, the app still reports
+`"state":"running"` while logging:
+
+```
+Backend failed to start: [Errno 61] Connect call failed
+```
+
+Confirm the connection rather than trusting the status, from the server side:
+
+```bash
+lsof -nP -iTCP:8765 -sTCP:ESTABLISHED     # expect 127.0.0.1:8765 -> 127.0.0.1:<port>
+```
+
+The speech-to-speech log should show `Client connected` and `Session configuration`.
+
 ### Known upstream bug: env leak into app subprocesses
 
 `AppManager.start_app` scrubs `GST_*`/`XDG_*` from the app subprocess env but **not**
