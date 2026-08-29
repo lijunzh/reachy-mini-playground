@@ -57,8 +57,11 @@ done
 if [ -f apps_venv/bin/pip ]; then
     CURRENT=$(./apps_venv/bin/python -c "import importlib.metadata as m; print(m.version('mcp'))" 2>/dev/null || echo none)
     case "$CURRENT" in
-        2.*|none) info "Pinning mcp<2 (currently $CURRENT) — required for remote tools"
-                  ./apps_venv/bin/pip install --quiet "mcp==1.29.0" ;;
+        2.*|none) info "Constraining to mcp<2 (currently $CURRENT) — required for remote tools"
+                  # Constrain the major, not a patch: the incompatibility is with
+                  # 2.x, and pinning an exact patch just goes stale. pip takes the
+                  # newest 1.x.
+                  ./apps_venv/bin/pip install --quiet "mcp<2" ;;
         *)        info "mcp $CURRENT already <2, leaving it alone" ;;
     esac
     ./apps_venv/bin/python -c "import importlib.metadata as m; print('    mcp', m.version('mcp'))"

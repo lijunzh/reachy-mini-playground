@@ -33,7 +33,7 @@ Nothing large is committed. Each layer is a pinned manifest plus a script:
 | Layer | Manifest | Script | Size |
 | --- | --- | --- | --- |
 | Simulator env | `requirements.txt` / `requirements.lock.txt` | `./setup.sh` | 1.4 GB |
-| Conversation app | pinned inside the script (`mcp==1.29.0`) | `./install-app.sh` | 1.3 GB |
+| Conversation app | constrained inside the script (`mcp<2`) | `./install-app.sh` | 1.3 GB |
 | Realtime backend | `requirements-s2s.txt` / `requirements-s2s.lock.txt` | `./setup-local-backend.sh` | 1.7 GB + 2.5 GB weights |
 | LLM server (opt-in) | Homebrew formula `jundot/omlx/omlx` | `./setup-llm-server.sh` | 3.6 GB |
 
@@ -433,7 +433,7 @@ SDK=<old>, daemon=<new>. Running different versions can create issues.
 Fix it in the app's own venv, matching whatever `requirements.txt` pins:
 
 ```bash
-./apps_venv/bin/pip install --upgrade "reachy-mini==1.10.0" "mcp==1.29.1"
+./apps_venv/bin/pip install --upgrade "reachy-mini==1.10.0" "mcp<2"
 ```
 
 Check alignment with:
