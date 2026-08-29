@@ -1,24 +1,33 @@
 # Copy to local-backend.conf and edit for this machine.
-# Used by run-local-backend.sh.
+# Used by run-llm-server.sh and run-local-backend.sh.
 
-# Prefer a non-reasoning (instruct) model. Reasoning models spend most of their
-# token budget thinking, which pushes each reply past the point where the turn is
-# cancelled and Reachy never answers. See README, "Troubleshooting".
-LLM_MODEL="qwen/qwen3.8-27b"
-LLM_BASE_URL="http://127.0.0.1:1234/v1"
-LLM_API_KEY="lm-studio"
+# --- LLM server -------------------------------------------------------------
+# Default: oMLX. Its prefix cache is worth ~2x over LM Studio at the app's real
+# ~9k-token turns, and ~9x over LM Studio's MLX engine, which does not cache.
+# Install with ./setup-llm-server.sh, start with ./run-llm-server.sh.
+LLM_BACKEND="chat-completions"            # omlx has no /v1/responses
+LLM_BASE_URL="http://127.0.0.1:8123/v1"
+LLM_MODEL="Qwen3-Coder-Next-MLX-4bit"     # as listed by GET /v1/models
+LLM_API_KEY="omlx"
 
+# oMLX server settings (run-llm-server.sh)
+# OMLX_MODEL_DIR="$HOME/.lmstudio/models"
+# OMLX_PORT="8123"
+# OMLX_SSD_CACHE_MAX="20GB"
+# OMLX_HOT_CACHE_MAX="8GB"                # absolute size; '20%' is rejected
+
+# --- Alternative: LM Studio -------------------------------------------------
+# Workable without installing anything extra, but use a GGUF model: LM Studio's
+# llama.cpp engine caches prompts, its MLX engine does not (5.13s vs 1.07s per
+# turn at 6.6k context). Also raise the loaded context length above 8192, or it
+# refuses the app's ~9k-token prompts with HTTP 400.
+# LLM_BACKEND="responses-api"
+# LLM_BASE_URL="http://127.0.0.1:1234/v1"
+# LLM_MODEL="<a GGUF instruct model>"
+# LLM_API_KEY="lm-studio"
+
+# --- Realtime server (run-local-backend.sh) ---------------------------------
 # WS_HOST="127.0.0.1"
 # WS_PORT="8765"
 # STT="parakeet-tdt"
 # TTS="qwen3"
-
-# --- Backend selection ------------------------------------------------------
-# responses-api    : LM Studio (implements /v1/responses)
-# chat-completions : omlx, mlx_lm.server (no /v1/responses)
-#
-# omlx is markedly faster at Reachy's real context size (~9k tokens/turn)
-# because of its prefix cache -- see README, "Which LLM server".
-# LLM_BACKEND="chat-completions"
-# LLM_BASE_URL="http://127.0.0.1:8123/v1"
-# LLM_MODEL="Qwen3-Coder-Next-MLX-4bit"

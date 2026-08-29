@@ -7,11 +7,13 @@ set -euo pipefail
 cd "$(dirname "$0")"
 
 # Defaults; override in local-backend.conf (gitignored, machine-specific).
-LLM_MODEL="qwen/qwen3.8-27b"
-LLM_BASE_URL="http://127.0.0.1:1234/v1"
-LLM_API_KEY="lm-studio"
-# responses-api (LM Studio) or chat-completions (omlx, mlx_lm.server).
-LLM_BACKEND="responses-api"
+# Defaults target oMLX (see README, "Which LLM server"). For LM Studio, set
+# these in local-backend.conf instead.
+LLM_MODEL="Qwen3-Coder-Next-MLX-4bit"
+LLM_BASE_URL="http://127.0.0.1:8123/v1"
+LLM_API_KEY="omlx"
+# chat-completions: omlx, mlx_lm.server. responses-api: LM Studio.
+LLM_BACKEND="chat-completions"
 WS_HOST="127.0.0.1"
 WS_PORT="8765"
 STT="parakeet-tdt"
@@ -29,7 +31,8 @@ TTS="qwen3"
 # chat completions. LM Studio does; mlx_lm.server does not.
 if ! curl -sf -m 5 "${LLM_BASE_URL%/v1}/v1/models" >/dev/null 2>&1; then
     echo "error: no OpenAI-compatible server at $LLM_BASE_URL" >&2
-    echo "       Start LM Studio and load $LLM_MODEL, then retry." >&2
+    echo "       Start it first (./run-llm-server.sh for oMLX, or launch LM" >&2
+    echo "       Studio and set LLM_* in local-backend.conf), then retry." >&2
     exit 1
 fi
 

@@ -34,25 +34,30 @@ Nothing large is committed. Each layer is a pinned manifest plus a script:
 | --- | --- | --- | --- |
 | Simulator env | `requirements.txt` / `requirements.lock.txt` | `./setup.sh` | 1.4 GB |
 | Conversation app | pinned inside the script (`mcp==1.29.0`) | `./install-app.sh` | 1.3 GB |
-| Local backend | `requirements-s2s.txt` / `requirements-s2s.lock.txt` | `./setup-local-backend.sh` | 1.7 GB + 2.5 GB weights |
+| Realtime backend | `requirements-s2s.txt` / `requirements-s2s.lock.txt` | `./setup-local-backend.sh` | 1.7 GB + 2.5 GB weights |
+| LLM server (opt-in) | Homebrew formula `jundot/omlx/omlx` | `./setup-llm-server.sh` | 3.6 GB |
 
 Full sequence on a new machine with internet access:
 
 ```bash
-./setup.sh                                    # 1. simulator env
-./setup-local-backend.sh                      # 2. speech-to-speech (skip if using the cloud backend)
-cp .env.example .env                          # 3. point the app at the local backend
-cp local-backend.conf.example local-backend.conf   # 4. set your LLM model / URL
+./setup.sh                                         # 1. simulator env
+./setup-local-backend.sh                           # 2. speech-to-speech realtime server
+./setup-llm-server.sh                              # 3. oMLX (or skip and use LM Studio)
+cp .env.example .env                               # 4. point the app at the local backend
+cp local-backend.conf.example local-backend.conf   # 5. LLM settings (defaults to oMLX)
 
-./run-local-backend.sh                        # 5. terminal A: realtime server
-./reachy_mini_env/bin/mjpython -m reachy_mini.daemon.app.main --sim --desktop-app-daemon  # terminal B
-./install-app.sh                              # 6. terminal C: install the app (daemon must be up)
+./run-llm-server.sh                                # terminal A: LLM server
+./run-local-backend.sh                             # terminal B: realtime server
+./reachy_mini_env/bin/mjpython -m reachy_mini.daemon.app.main --sim --desktop-app-daemon  # terminal C
+./install-app.sh                                   # terminal D: install the app (daemon must be up)
 curl -X POST http://127.0.0.1:8000/api/apps/start-app/reachy_mini_conversation_app
 ```
 
-Machine-specific files (`.env`, `local-backend.conf`) are gitignored; copy them
-from the `.example` versions. Skip steps 2, 4, and 5 to use the hosted Hugging
-Face backend instead.
+Start order matters: the LLM server before the realtime server, and both before the app.
+
+Machine-specific files (`.env`, `local-backend.conf`) are gitignored; copy them from the
+`.example` versions. Skip steps 2, 3 and 5 to use the hosted Hugging Face backend instead;
+skip only step 3 to use LM Studio as the LLM server.
 
 The venv is deliberately not in git: it is 1.4 GB, macOS/arm64-only, and hardcodes
 absolute paths in its console-script shebangs and `pyvenv.cfg`, so a copied venv breaks on
@@ -238,77 +243,72 @@ that is only on `main`. Passing it fails with
 
 ### Which LLM server
 
-`speech-to-speech` defaults to the Responses API (`/v1/responses`), which LM Studio
-implements. Servers that only speak chat completions work too — set `LLM_BACKEND` in
-`local-backend.conf`:
+**Default: [oMLX](https://github.com/jundot/omlx)**, opt-in during setup:
 
 ```bash
-LLM_BACKEND="chat-completions"          # omlx, mlx_lm.server
-LLM_BASE_URL="http://127.0.0.1:8123/v1"
+./setup-llm-server.sh     # ~3.6 GB, compiles Rust — not part of ./setup.sh
+./run-llm-server.sh       # start it before ./run-local-backend.sh
 ```
 
-`--llm_backend` accepts `transformers`, `mlx-lm`, `responses-api` (default) and
-`chat-completions`; the chat-completions backend reuses the same
-`--responses_api_base_url` / `--responses_api_api_key` flags.
+It is deliberately not in `setup.sh`: the simulator does not need it, it pulls
+~3.6 GB (omlx, llvm@22, rust, python@3.11) from a third-party tap, and the build takes
+a while. LM Studio is a workable alternative — see below.
 
-**Context size decides which server to use.** The conversation app sends a large stable
-prefix — instructions plus tool schemas plus growing history. Measured from a real
-session's own accounting:
+**Context size is what decides this.** The conversation app sends a large stable prefix
+(instructions, tool schemas, growing history). From a real session's own accounting:
 
 ```
 this response: input_tokens=8879 / 8937 / 8979 / 9341
 ```
 
-**~9,000 tokens per turn.** At that size a prefix cache dominates everything else.
-Same model (`Qwen3-Coder-Next-MLX-4bit`), same prompts, 6,656-token context:
+**~9,000 tokens per turn**, so a prefix cache dominates. Measured on identical prompts at
+a 6,656-token context:
 
-| Server | req 1 | req 2 | req 3 | cached tokens |
-| --- | --- | --- | --- | --- |
-| **omlx** (prefix cache on) | **1.01 s** | **0.58 s** | **0.58 s** | 6144 |
-| LM Studio | 5.66 s | 5.15 s | 5.13 s | none |
+| Setup | warm/turn | caches? |
+| --- | --- | --- |
+| **oMLX** (MLX + prefix cache) | **0.58 s** | yes, 6144 tokens |
+| LM Studio, **GGUF** model (llama.cpp) | ~1.07 s | yes |
+| LM Studio, **MLX** model | 5.13 s | **no** |
 
-omlx is roughly **9x faster per turn**: LM Studio re-prefills all 6,656 tokens on every
-request, omlx serves them from cache. Prefer **omlx for the conversation app.**
+Two things follow. oMLX is fastest, by roughly 2x over a well-configured LM Studio. And
+if you stay on LM Studio, **use a GGUF model, not MLX** — its MLX engine re-prefills the
+whole prompt every request. (The GGUF row used a larger model, so treat the 0.58 vs 1.07
+gap as indicative rather than exact.)
 
-Two things make this easy to measure wrong:
+Three traps, all of which cost measurable time to find:
 
-- omlx caches in **2048-token blocks**. Below ~2048 tokens nothing is cacheable and omlx
-  looks no better than LM Studio (at ~700-token prompts LM Studio is actually ahead,
-  0.46 s vs 1.03 s per turn). Benchmark at your real context size or the result is
-  meaningless.
-- The cache is **off by default**. Without `--paged-ssd-cache-dir` omlx reports
-  `cached=0` and the feature does nothing.
+- oMLX caches in **2048-token blocks**. Below ~2048 tokens nothing is cacheable and oMLX
+  looks *worse* than LM Studio (0.46 s vs 1.03 s at ~700-token prompts). Benchmark at
+  your real context size or the result is meaningless.
+- oMLX's cache is **off by default** — without `--paged-ssd-cache-dir` it reports
+  `cached=0`. `run-llm-server.sh` passes it. Its README's `--hot-cache-max-size 20%` is
+  rejected; the flag wants an absolute size.
+- LM Studio's **loaded context length** defaults well below what the app sends. At ~9k
+  tokens it refuses outright with `HTTP 400: The number of tokens to keep from the
+  initial prompt is greater than the context length`. Ours was 8192 against a model
+  maximum of 262144.
 
-Start omlx with caching enabled, on a port other than 8000 (the Reachy daemon's):
-
-```bash
-omlx serve --model-dir ~/.lmstudio/models --host 127.0.0.1 --port 8123 \
-  --paged-ssd-cache-dir ~/.omlx/cache --paged-ssd-cache-max-size 20GB \
-  --hot-cache-max-size 8GB
-```
-
-`--hot-cache-max-size 20%` from omlx's README is rejected — it wants an absolute size.
-
-**Check LM Studio's loaded context if you stay with it.** It defaults well below what the
-app sends; at ~9k tokens it refuses the request outright:
-
-```
-HTTP 400: The number of tokens to keep from the initial prompt is greater than
-          the context length. Try to load the model with a larger context length
-```
-
-Its `loaded_context_length` was 8192 against a model maximum of 262144.
-
-**Model choice still matters more than either server for reasoning models.** A reasoning
-model spends most of its budget thinking (measured: 86% of tokens, 13.2 s/turn on
-`qwen3.8-27b`); a non-reasoning model of the same family answers in under a second.
-Use an instruct build.
-
-Re-run any of this with `bench-llm.py` (single turns) — and benchmark at your real
-context size, not a toy prompt:
+**Backend selection.** `speech-to-speech` defaults to the Responses API (`/v1/responses`),
+which LM Studio implements and oMLX does not. `local-backend.conf` selects it:
 
 ```bash
-./reachy_mini_env/bin/python bench-llm.py "LM Studio" http://127.0.0.1:1234/v1 <model-id> --chat
+LLM_BACKEND="chat-completions"            # omlx, mlx_lm.server
+LLM_BASE_URL="http://127.0.0.1:8123/v1"
+```
+
+`--llm_backend` accepts `transformers`, `mlx-lm`, `responses-api` and `chat-completions`;
+the chat-completions backend reuses the same `--responses_api_base_url` /
+`--responses_api_api_key` flags.
+
+**Model choice still outweighs the server for reasoning models.** A reasoning model spends
+most of its budget thinking (measured: 86% of tokens, 13.2 s/turn on `qwen3.8-27b`). Use
+an instruct build.
+
+Re-measure any of this with `bench-llm.py`, at your real context size rather than a toy
+prompt:
+
+```bash
+./reachy_mini_env/bin/python bench-llm.py "omlx" http://127.0.0.1:8123/v1 <model-id> --chat
 ```
 
 **Use a non-reasoning (instruct) model.** This matters more than any flag.
