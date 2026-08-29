@@ -24,3 +24,7 @@ __pycache__/
 # Local environment overrides
 .env
 local-backend.conf
+proxy.env
+
+# Generated CA bundle (machine-specific; rebuild with ./make-ca-bundle.sh)
+certs/

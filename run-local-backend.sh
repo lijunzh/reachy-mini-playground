@@ -16,6 +16,9 @@ STT="parakeet-tdt"
 TTS="qwen3"
 # shellcheck disable=SC1091
 [ -f local-backend.conf ] && . ./local-backend.conf
+# Proxy + CA settings, only present behind a TLS-intercepting proxy.
+# shellcheck disable=SC1091
+[ -f proxy.env ] && . ./proxy.env
 
 [ -x ./s2s_venv/bin/speech-to-speech ] || {
     echo "error: s2s_venv missing. Run ./setup-local-backend.sh first." >&2; exit 1; }

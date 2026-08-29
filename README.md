@@ -100,6 +100,10 @@ On macOS the `mjpython` launcher is required; plain `reachy-mini-daemon --sim` w
 drive the GUI correctly. Add `--scene minimal` for a table with objects (apple, croissant,
 duck), or `--headless` to run with no viewer window.
 
+**Backgrounding the daemon requires `--headless`.** `mjpython` needs the main thread for
+the MuJoCo viewer, so `nohup mjpython ... --sim &` dies with `Segmentation fault: 11`.
+Either run it in the foreground with a viewer, or background it headless.
+
 **Startup takes 50–90 seconds.** GStreamer rescans its plugin registry in-process on every
 launch and no cache is persisted. It is not hung — wait for:
 
@@ -172,6 +176,32 @@ Wait for `OpenAI Realtime API starting on ws://127.0.0.1:8765/v1/realtime`, then
 
 Verify the app picked the local path — the log should show `connection mode: local` and no
 requests to `pollen-robotics-reachy-mini-realtime-url.hf.space`.
+
+### Corporate proxy (TLS interception)
+
+Skip this section on an unrestricted network.
+
+Model weights live in Hugging Face LFS, and those requests `302` to
+`us.aws.cdn.hf.co`. Two separate things break there:
+
+1. **The default egress proxy refuses that CDN** (`407`), even though it happily serves
+   `huggingface.co` itself. Other proxies are listed in the PAC file at
+   `http://wmtpac.wal-mart.com/proxies/anycast-universal.pac`; `proxy-intlho.wal-mart.com:8080`
+   reaches both hosts. Check the PAC before concluding a host is blocked.
+2. **That proxy re-signs TLS.** `curl` accepts it via the system keychain, but Python's
+   `certifi` bundle does not, so `requests` raises `CERTIFICATE_VERIFY_FAILED`.
+   `huggingface_hub` catches it and re-raises `LocalEntryNotFoundError`, whose message
+   blames your internet connection — a red herring. To see the real error, retry the URL
+   with a plain `requests.head()`.
+
+```bash
+./make-ca-bundle.sh                   # certifi roots + corporate roots
+cp proxy.env.example proxy.env        # proxy + CA env vars in one place
+./prefetch-models.sh                  # ~4.9 GB; resumable, re-run after a drop
+```
+
+`run-local-backend.sh` sources `proxy.env` when present. Also note `HF_HUB_DISABLE_XET=1`
+in that file: `hf-xet` is a separate Rust HTTP stack that honours no proxy or CA variable.
 
 ### Notes
 
