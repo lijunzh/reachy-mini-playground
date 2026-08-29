@@ -236,11 +236,45 @@ The installed CLI has **no `serve` subcommand**, despite what the upstream READM
 that is only on `main`. Passing it fails with
 `Some specified arguments are not used by the HfArgumentParser: ['serve']`.
 
-The LLM server must implement the **Responses API** (`/v1/responses`), not just chat
-completions. LM Studio does. `mlx_lm.server` does **not** — it exposes only
-`/v1/chat/completions`, `/v1/completions`, and `/v1/models`, so it cannot be used here.
-LM Studio runs MLX models natively, so prefer an MLX build of your model over swapping
-servers.
+**Picking an LLM server.** `speech-to-speech` defaults to the Responses API
+(`/v1/responses`), which LM Studio implements. Servers that only speak chat completions
+still work — select them explicitly:
+
+```bash
+--llm_backend chat-completions --responses_api_base_url http://127.0.0.1:8123/v1
+```
+
+`--llm_backend` accepts `transformers`, `mlx-lm`, `responses-api` (default), and
+`chat-completions`; the `chat-completions` backend reuses the same
+`--responses_api_base_url` / `--responses_api_api_key` flags and adds
+`--responses_api_reasoning_effort` for providers that ignore
+`chat_template_kwargs.enable_thinking`. So `omlx` and `mlx_lm.server`, which expose no
+`/v1/responses`, are usable via that backend.
+
+**But the server is not what makes this fast — the model is.** Measured on this machine
+with identical prompts (`bench-llm.py`, 3 conversational turns, warm):
+
+| Server | Model | avg/turn | tok/s | reasoning |
+| --- | --- | --- | --- | --- |
+| LM Studio | `qwen3.8-27b` (GGUF, reasoning) | 13.2 s | 12.4 | 86% |
+| LM Studio | `Qwen3-Coder-Next` (MLX) | **0.8 s** | 51.7 | 0% |
+| omlx | `Qwen3-Coder-Next` (MLX) | 1.0 s | 32.1 | 0% |
+
+Two conclusions. Switching from a reasoning to a non-reasoning model was worth ~16x;
+switching servers was worth nothing — on identical weights LM Studio matched or beat omlx
+when warm (omlx does load models faster from cold: 9.4 s vs 21.3 s). Installing omlx is
+not necessary: LM Studio runs MLX models natively, so load an MLX instruct build there and
+set `LLM_MODEL` in `local-backend.conf`.
+
+Re-run the comparison yourself against any model with `bench-llm.py`:
+
+```bash
+./reachy_mini_env/bin/python bench-llm.py "LM Studio" http://127.0.0.1:1234/v1 <model-id> --chat
+```
+
+Run it twice — the first turn includes model load, so compare the warm numbers.
+
+If you do run omlx, give it a port other than 8000 — that is the Reachy daemon's.
 
 **Use a non-reasoning (instruct) model.** This matters more than any flag.
 `--responses_api_disable_thinking` sends `chat_template_kwargs.enable_thinking=false`,
