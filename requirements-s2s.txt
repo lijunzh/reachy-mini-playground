@@ -1,0 +1,4 @@
+# Local speech-to-speech realtime backend (see README, "Fully local backend").
+# Pinned: the released CLI has changed shape between versions (upstream main
+# documents a `serve` subcommand this release does not have).
+speech-to-speech==0.2.12

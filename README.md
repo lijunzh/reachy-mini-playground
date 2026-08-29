@@ -22,6 +22,37 @@ cd reachy-mini-playground
 ./setup.sh
 ```
 
+Pass `--locked` to install the exact transitive versions from
+`requirements.lock.txt` instead of resolving fresh.
+
+### Reproducing the whole setup elsewhere
+
+Nothing large is committed. Each layer is a pinned manifest plus a script:
+
+| Layer | Manifest | Script | Size |
+| --- | --- | --- | --- |
+| Simulator env | `requirements.txt` / `requirements.lock.txt` | `./setup.sh` | 1.4 GB |
+| Conversation app | pinned inside the script (`mcp==1.29.0`) | `./install-app.sh` | 1.3 GB |
+| Local backend | `requirements-s2s.txt` / `requirements-s2s.lock.txt` | `./setup-local-backend.sh` | 1.7 GB + 2.5 GB weights |
+
+Full sequence on a new machine with internet access:
+
+```bash
+./setup.sh                                    # 1. simulator env
+./setup-local-backend.sh                      # 2. speech-to-speech (skip if using the cloud backend)
+cp .env.example .env                          # 3. point the app at the local backend
+cp local-backend.conf.example local-backend.conf   # 4. set your LLM model / URL
+
+./run-local-backend.sh                        # 5. terminal A: realtime server
+./reachy_mini_env/bin/mjpython -m reachy_mini.daemon.app.main --sim --desktop-app-daemon  # terminal B
+./install-app.sh                              # 6. terminal C: install the app (daemon must be up)
+curl -X POST http://127.0.0.1:8000/api/apps/start-app/reachy_mini_conversation_app
+```
+
+Machine-specific files (`.env`, `local-backend.conf`) are gitignored; copy them
+from the `.example` versions. Skip steps 2, 4, and 5 to use the hosted Hugging
+Face backend instead.
+
 The venv is deliberately not in git: it is 1.4 GB, macOS/arm64-only, and hardcodes
 absolute paths in its console-script shebangs and `pyvenv.cfg`, so a copied venv breaks on
 any other machine. `requirements.txt` plus this script is the reproducible part.
@@ -117,8 +148,7 @@ path. The same stack runs the hosted backend, so behaviour matches closely.
 ### Install
 
 ```bash
-uv venv s2s_venv --python 3.12 --seed
-./s2s_venv/bin/pip install speech-to-speech
+./setup-local-backend.sh            # or --locked for exact transitive versions
 ```
 
 On Apple Silicon this pulls MLX, so STT and TTS run on the GPU. First start downloads
@@ -129,14 +159,12 @@ On Apple Silicon this pulls MLX, so STT and TTS run on the GPU. First start down
 Start the realtime server **before** the daemon and app:
 
 ```bash
-./s2s_venv/bin/speech-to-speech \
-  --model_name "qwen/qwen3.8-27b" \
-  --responses_api_base_url "http://127.0.0.1:1234/v1" \
-  --responses_api_api_key "lm-studio" \
-  --responses_api_disable_thinking \
-  --stt parakeet-tdt --tts qwen3 \
-  --ws_host 127.0.0.1 --ws_port 8765
+cp local-backend.conf.example local-backend.conf   # set LLM_MODEL / LLM_BASE_URL
+./run-local-backend.sh
 ```
+
+The script checks the LLM server is reachable before starting, and passes the
+flags explained under Notes below.
 
 Wait for `OpenAI Realtime API starting on ws://127.0.0.1:8765/v1/realtime`, then
 `cp .env.example .env` and start the daemon and app as usual.
@@ -170,8 +198,12 @@ environment:
 
 ```bash
 mjpython -m reachy_mini.daemon.app.main --sim --desktop-app-daemon
-curl -X POST http://127.0.0.1:8000/api/apps/start-app/<app_name>
+./install-app.sh                      # defaults to the conversation app
+curl -X POST http://127.0.0.1:8000/api/apps/start-app/reachy_mini_conversation_app
 ```
+
+`install-app.sh` also applies the `mcp<2` pin described below; installing through
+the raw API alone will leave the remote tools broken.
 
 The conversation app's web UI is then at http://127.0.0.1:7860/. First start takes ~75 s
 (fresh GStreamer registry scan in `apps_venv`).

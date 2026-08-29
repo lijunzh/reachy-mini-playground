@@ -3,13 +3,17 @@
 # Recreate the Reachy Mini simulator environment on a macOS machine.
 # Idempotent: safe to re-run against an existing environment.
 #
-#   ./setup.sh
+#   ./setup.sh            # pinned direct dependency
+#   ./setup.sh --locked   # exact transitive versions from requirements.lock.txt
 #
 set -euo pipefail
 
 VENV="reachy_mini_env"
 PY_VERSION="3.12"
 cd "$(dirname "$0")"
+
+LOCKED=0
+[ "${1:-}" = "--locked" ] && LOCKED=1
 
 info() { printf '\033[1;34m==>\033[0m %s\n' "$1"; }
 warn() { printf '\033[1;33m warn:\033[0m %s\n' "$1"; }
@@ -47,9 +51,14 @@ fi
 # --- 3. packages ------------------------------------------------------------
 # Use pip inside the venv rather than `uv pip`: the upstream docs warn that uv
 # has compatibility issues with MuJoCo on macOS.
-info "Installing packages from requirements.txt (this pulls ~1.4 GB the first time)"
 "./$VENV/bin/pip" install --quiet --upgrade pip
-"./$VENV/bin/pip" install --quiet -r requirements.txt
+if [ "$LOCKED" = "1" ]; then
+    info "Installing exact locked versions from requirements.lock.txt (~1.4 GB)"
+    "./$VENV/bin/pip" install --quiet -r requirements.lock.txt
+else
+    info "Installing packages from requirements.txt (this pulls ~1.4 GB the first time)"
+    "./$VENV/bin/pip" install --quiet -r requirements.txt
+fi
 
 # --- 4. macOS fix: shared libpython for mjpython -----------------------------
 # mjpython dlopens @rpath/libpython3.12.dylib. uv's standalone CPython ships the

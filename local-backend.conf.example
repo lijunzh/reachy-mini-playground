@@ -1,0 +1,11 @@
+# Copy to local-backend.conf and edit for this machine.
+# Used by run-local-backend.sh.
+
+LLM_MODEL="qwen/qwen3.8-27b"
+LLM_BASE_URL="http://127.0.0.1:1234/v1"
+LLM_API_KEY="lm-studio"
+
+# WS_HOST="127.0.0.1"
+# WS_PORT="8765"
+# STT="parakeet-tdt"
+# TTS="qwen3"
