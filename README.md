@@ -47,6 +47,7 @@ cp .env.example .env                               # 4. point the app at the loc
 cp local-backend.conf.example local-backend.conf   # 5. LLM settings (defaults to oMLX)
 
 ./run-llm-server.sh                                # terminal A: LLM server
+                                                   #   (or: brew services start omlx)
 ./run-local-backend.sh                             # terminal B: realtime server
 ./reachy_mini_env/bin/mjpython -m reachy_mini.daemon.app.main --sim --desktop-app-daemon  # terminal C
 ./install-app.sh                                   # terminal D: install the app (daemon must be up)
@@ -246,13 +247,48 @@ that is only on `main`. Passing it fails with
 **Default: [oMLX](https://github.com/jundot/omlx)**, opt-in during setup:
 
 ```bash
-./setup-llm-server.sh     # ~3.6 GB, compiles Rust — not part of ./setup.sh
-./run-llm-server.sh       # start it before ./run-local-backend.sh
+./setup-llm-server.sh     # installs via Homebrew and seeds ~/.omlx/settings.json
 ```
 
-It is deliberately not in `setup.sh`: the simulator does not need it, it pulls
-~3.6 GB (omlx, llvm@22, rust, python@3.11) from a third-party tap, and the build takes
-a while. LM Studio is a workable alternative — see below.
+Then run it either way:
+
+```bash
+./run-llm-server.sh           # foreground — easiest to watch and Ctrl-C
+brew services start omlx      # background, auto-restarts on crash
+brew services info omlx       # status;  omlx start | stop | restart
+```
+
+It is deliberately not part of `setup.sh`: the simulator never needs it, and it pulls
+~3.6 GB (omlx, plus `rust` and `llvm@22` as **build-only** deps) from a third-party tap.
+The runtime dependency tree is just `python@3.11`. LM Studio is a workable alternative —
+see below.
+
+**Configuration lives in `~/.omlx/settings.json`, not only in CLI flags.** The flags
+write to that file, and oMLX reads it at startup. That is what makes `brew services`
+usable: its service definition runs a bare `omlx serve`, which still gets the prefix
+cache because the settings persist. `setup-llm-server.sh` seeds the file so this is true
+before the first start — without it, the service would silently run with the cache off.
+
+```
+[cache]  ssd_cache_dir, ssd_cache_max_size, hot_cache_max_size
+[server] host, port
+```
+
+Verified: a bare `omlx serve` with no flags reports `cached=6144` and 0.58 s/turn,
+identical to the flag-driven run.
+
+> **One settings file, last writer wins.** `~/.omlx/settings.json` is global. Two oMLX
+> installs (say Homebrew and a pip wheel) overwrite each other's port and cache
+> directory. Run one.
+
+**Monitoring.** The CLI server serves a web console at http://127.0.0.1:8123/admin —
+logs, metrics, throughput, cache and batch state, and one-click benchmarking. Set an API
+key on first visit, then use the same value as `LLM_API_KEY` in `local-backend.conf`.
+`GET /health` gives the same status as JSON, and `/docs` is the OpenAPI page. **The
+macOS `.dmg` is not needed for any of this** — it adds a menu-bar wrapper around the same
+server, is macOS-version-locked, and is manual to update.
+
+Under `brew services`, logs go to `$(brew --prefix)/var/log/omlx.log`.
 
 **Context size is what decides this.** The conversation app sends a large stable prefix
 (instructions, tool schemas, growing history). From a real session's own accounting:

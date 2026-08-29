@@ -1,7 +1,17 @@
 #!/usr/bin/env bash
 #
-# Start oMLX with its prefix cache enabled. Run this before ./run-local-backend.sh.
-# Settings come from local-backend.conf (gitignored, machine-specific).
+# Start oMLX in the foreground with its prefix cache enabled. Run this before
+# ./run-local-backend.sh. Settings come from local-backend.conf.
+#
+# For a background server that auto-restarts on crash, use brew instead:
+#
+#     brew services start omlx     # logs: $(brew --prefix)/var/log/omlx.log
+#     brew services info omlx
+#     omlx start | stop | restart
+#
+# That runs a bare `omlx serve`, which reads ~/.omlx/settings.json -- seeded by
+# ./setup-llm-server.sh -- so the prefix cache is on there too. This script is
+# the foreground equivalent, easier to watch and Ctrl-C.
 #
 set -euo pipefail
 cd "$(dirname "$0")"
@@ -27,7 +37,8 @@ mkdir -p "$OMLX_SSD_CACHE_DIR"
 echo "==> omlx  : $OMLX_HOST:$OMLX_PORT  models=$OMLX_MODEL_DIR"
 echo "==> cache : ssd=$OMLX_SSD_CACHE_DIR ($OMLX_SSD_CACHE_MAX)  hot=$OMLX_HOT_CACHE_MAX"
 echo "    The prefix cache is what makes this fast at the app's ~9k-token turns."
-echo "    It is OFF unless --paged-ssd-cache-dir is passed, which this script does."
+echo "    These flags also persist into ~/.omlx/settings.json, so a later bare"
+echo "    'omlx serve' (what brew services runs) keeps the same cache config."
 
 exec "$OMLX" serve \
     --model-dir "$OMLX_MODEL_DIR" \

@@ -33,13 +33,55 @@ OMLX=$(command -v omlx || echo /opt/homebrew/opt/omlx/bin/omlx)
 info "Verifying"
 echo "    omlx $("$OMLX" --version 2>&1 | head -1)"
 
+# Seed ~/.omlx/settings.json. oMLX reads its config from there, so a bare
+# `omlx serve` -- which is exactly what `brew services` runs -- picks up the
+# prefix cache without any CLI flags. Without this the service would run with
+# the cache off, which is the whole reason to prefer oMLX.
+# Merge rather than overwrite: the file also holds the admin API key.
+OMLX_PORT="${OMLX_PORT:-8123}"
+OMLX_MODEL_DIR="${OMLX_MODEL_DIR:-$HOME/.lmstudio/models}"
+OMLX_SSD_CACHE_DIR="${OMLX_SSD_CACHE_DIR:-$HOME/.omlx/cache}"
+OMLX_SSD_CACHE_MAX="${OMLX_SSD_CACHE_MAX:-20GB}"
+OMLX_HOT_CACHE_MAX="${OMLX_HOT_CACHE_MAX:-8GB}"
+# shellcheck disable=SC1091
+[ -f local-backend.conf ] && . ./local-backend.conf
+
+info "Seeding ~/.omlx/settings.json (cache on, port $OMLX_PORT)"
+mkdir -p "$HOME/.omlx" "$OMLX_SSD_CACHE_DIR"
+OMLX_PORT="$OMLX_PORT" OMLX_MODEL_DIR="$OMLX_MODEL_DIR" \
+OMLX_SSD_CACHE_DIR="$OMLX_SSD_CACHE_DIR" \
+OMLX_SSD_CACHE_MAX="$OMLX_SSD_CACHE_MAX" \
+OMLX_HOT_CACHE_MAX="$OMLX_HOT_CACHE_MAX" \
+python3 - <<'PYEOF'
+import json, os, pathlib
+p = pathlib.Path.home() / ".omlx/settings.json"
+d = json.loads(p.read_text()) if p.exists() else {}
+srv = d.setdefault("server", {})
+srv["port"] = int(os.environ["OMLX_PORT"])
+srv["host"] = "127.0.0.1"
+mdl = d.setdefault("model", {})
+mdl["model_dir"] = os.environ["OMLX_MODEL_DIR"]
+mdl["model_dirs"] = [os.environ["OMLX_MODEL_DIR"]]
+c = d.setdefault("cache", {})
+c["ssd_cache_dir"] = os.environ["OMLX_SSD_CACHE_DIR"]
+c["ssd_cache_max_size"] = os.environ["OMLX_SSD_CACHE_MAX"]
+c["hot_cache_max_size"] = os.environ["OMLX_HOT_CACHE_MAX"]
+p.write_text(json.dumps(d, indent=2))
+print(f"    port={srv['port']} cache={c['ssd_cache_dir']} "
+      f"ssd={c['ssd_cache_max_size']} hot={c['hot_cache_max_size']}")
+PYEOF
+
 cat <<'MSG'
 
-Done. Start it with:
+Done. Start it either way:
 
-    ./run-llm-server.sh
+    ./run-llm-server.sh          # foreground, easiest to watch and Ctrl-C
+    brew services start omlx     # background, auto-restarts on crash,
+                                 # logs to $(brew --prefix)/var/log/omlx.log
 
-Then point the realtime backend at it by copying local-backend.conf.example to
-local-backend.conf (it already defaults to omlx).
+Both use the same ~/.omlx/settings.json just written, so the prefix cache is on
+in both. Admin console: http://127.0.0.1:8123/admin
+
+Then copy local-backend.conf.example to local-backend.conf (it defaults to oMLX).
 
 MSG
