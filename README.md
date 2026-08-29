@@ -6,7 +6,7 @@ Lite on `localhost`, so SDK scripts run unmodified on real hardware later.
 
 **macOS (Apple Silicon) only.** The scripts refuse to run elsewhere: `mjpython` needs a
 macOS-specific dylib fix, and the local conversation backend pulls MLX, which has no Intel
-build. Python 3.12, `reachy-mini` 1.10.0rc5, `mujoco` 3.3.0.
+build. Python 3.12, `reachy-mini` 1.10.0, `mujoco` 3.3.0.
 
 ## Setup
 
@@ -408,8 +408,10 @@ mjpython -m reachy_mini.daemon.app.main --sim --desktop-app-daemon
 curl -X POST http://127.0.0.1:8000/api/apps/start-app/reachy_mini_conversation_app
 ```
 
-`install-app.sh` also applies the `mcp<2` pin described below; installing through
-the raw API alone will leave the remote tools broken.
+`install-app.sh` also checks the `mcp` pin described below. Since app version 1.0.1
+upstream declares `mcp<2,>=1.27.1` itself, so a fresh install no longer pulls the broken
+2.x; the check stays as a guard for older installs and reports "already <2" when there is
+nothing to do.
 
 The conversation app's web UI is then at http://127.0.0.1:7860/. First start takes ~75 s
 (fresh GStreamer registry scan in `apps_venv`).
@@ -420,10 +422,10 @@ The conversation app's web UI is then at http://127.0.0.1:7860/. First start tak
 `PYTHONPATH` or `GST_PYTHONPATH_1_0`, both of which the daemon's `gstreamer_bundle.pth`
 points at the *daemon's* site-packages. Because they take precedence over the target venv,
 an app launched with `apps_venv`'s interpreter imports `reachy_mini` and `gi` from the
-daemon's venv instead. Confirmed present in 1.10.0rc5.
+daemon's venv instead. Confirmed present in 1.10.0.
 
 This is invisible while the daemon and `apps_venv` hold the *same* SDK version — which is
-why this project pins both to 1.10.0rc5. It bites as soon as they diverge, with either:
+why this project pins both to 1.10.0. It bites as soon as they diverge, with either:
 
 ```
 ModuleNotFoundError: No module named 'reachy_mini.io.jsonrpc'   # PYTHONPATH leak
