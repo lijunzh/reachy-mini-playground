@@ -98,6 +98,70 @@ does *not* stop it; only `--headless` does, since the camera thread is gated on 
 **Do not name your own package `reachy_mini`.** A `reachy_mini/` directory or
 `reachy_mini.py` file in the working directory shadows the installed SDK and breaks imports.
 
+## Fully local backend (no cloud)
+
+By default the conversation app streams microphone audio to a Hugging Face realtime
+endpoint on AWS. To keep everything on this machine, run
+[huggingface/speech-to-speech](https://github.com/huggingface/speech-to-speech) as the
+realtime server and point its LLM slot at a local OpenAI-compatible server such as
+[LM Studio](https://lmstudio.ai/).
+
+```
+mic -> conversation app --ws--> speech-to-speech :8765 --http--> LM Studio :1234
+                                (Parakeet STT + Qwen3-TTS)       (your local model)
+```
+
+No app code is modified: this is the app's supported `HF_REALTIME_CONNECTION_MODE=local`
+path. The same stack runs the hosted backend, so behaviour matches closely.
+
+### Install
+
+```bash
+uv venv s2s_venv --python 3.12 --seed
+./s2s_venv/bin/pip install speech-to-speech
+```
+
+On Apple Silicon this pulls MLX, so STT and TTS run on the GPU. First start downloads
+~2.5 GB of weights (Smart Turn VAD, Parakeet TDT, Qwen3-TTS) into `~/.cache/huggingface`.
+
+### Run
+
+Start the realtime server **before** the daemon and app:
+
+```bash
+./s2s_venv/bin/speech-to-speech \
+  --model_name "qwen/qwen3.8-27b" \
+  --responses_api_base_url "http://127.0.0.1:1234/v1" \
+  --responses_api_api_key "lm-studio" \
+  --responses_api_disable_thinking \
+  --stt parakeet-tdt --tts qwen3 \
+  --ws_host 127.0.0.1 --ws_port 8765
+```
+
+Wait for `OpenAI Realtime API starting on ws://127.0.0.1:8765/v1/realtime`, then
+`cp .env.example .env` and start the daemon and app as usual.
+
+Verify the app picked the local path — the log should show `connection mode: local` and no
+requests to `pollen-robotics-reachy-mini-realtime-url.hf.space`.
+
+### Notes
+
+The installed CLI has **no `serve` subcommand**, despite what the upstream README shows;
+that is only on `main`. Passing it fails with
+`Some specified arguments are not used by the HfArgumentParser: ['serve']`.
+
+The LLM server must implement the **Responses API** (`/v1/responses`), not just chat
+completions. LM Studio does. `mlx_lm.server` does **not** — it exposes only
+`/v1/chat/completions`, `/v1/completions`, and `/v1/models`, so it cannot be used here.
+LM Studio runs MLX models natively, so prefer an MLX build of your model over swapping
+servers.
+
+`--responses_api_disable_thinking` matters for reasoning models: without it Qwen3 spends
+most of its token budget on reasoning, adding dead air to every spoken turn.
+
+Watch `Qwen3-TTS RTF` in the logs. Above 1.0 means synthesis is slower than realtime and
+replies will lag; STT and TTS share an MLX lock and compete with the LLM for the GPU.
+
 ## Apps
 
 Install official apps through the daemon API (or Reachy Mini Control). Run the daemon with

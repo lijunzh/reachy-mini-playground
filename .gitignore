@@ -1,6 +1,7 @@
 # Virtual environments (never commit)
 reachy_mini_env/
 apps_venv/
+s2s_venv/
 .venv/
 venv/
 
@@ -19,3 +20,6 @@ __pycache__/
 
 # macOS
 .DS_Store
+
+# Local environment overrides
+.env
