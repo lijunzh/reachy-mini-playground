@@ -179,7 +179,11 @@ requests to `pollen-robotics-reachy-mini-realtime-url.hf.space`.
 
 ### Corporate proxy (TLS interception)
 
-Skip this section on an unrestricted network.
+**Skip this whole section on an unrestricted network.** Nothing here runs unless you
+create `proxy.env`, which is gitignored and never present on a fresh clone. Without it,
+`run-local-backend.sh` and `prefetch-models.sh` use settings tuned for a normal
+connection: the full emotions library including its sound effects, and the usual eight
+parallel download workers.
 
 Model weights live in Hugging Face LFS, and those requests `302` to
 `us.aws.cdn.hf.co`. Two separate things break there:
@@ -199,6 +203,10 @@ Model weights live in Hugging Face LFS, and those requests `302` to
 cp proxy.env.example proxy.env        # proxy + CA env vars in one place
 ./prefetch-models.sh                  # ~4.9 GB; resumable, re-run after a drop
 ```
+
+Creating `proxy.env` is what switches both scripts into proxy mode, so keep it out of
+version control (it is already in `.gitignore`) and delete it if the machine moves off
+the corporate network.
 
 `run-local-backend.sh` sources `proxy.env` when present. Also note `HF_HUB_DISABLE_XET=1`
 in that file: `hf-xet` is a separate Rust HTTP stack that honours no proxy or CA variable.
