@@ -203,6 +203,25 @@ cp proxy.env.example proxy.env        # proxy + CA env vars in one place
 `run-local-backend.sh` sources `proxy.env` when present. Also note `HF_HUB_DISABLE_XET=1`
 in that file: `hf-xet` is a separate Rust HTTP stack that honours no proxy or CA variable.
 
+**Start the daemon with `proxy.env` sourced too.** App subprocesses inherit the daemon's
+environment, and without it `play_emotion` and `dance` fail with
+`ConnectError: [Errno 8] nodename nor servname provided` when they reach for their
+libraries — a DNS failure, not a missing asset.
+
+### What stays broken behind the proxy
+
+The LLM is on `127.0.0.1` and needs no proxy at all, so conversation itself is unaffected.
+Two things that genuinely reach the internet do not survive:
+
+| Feature | Status |
+| --- | --- |
+| `get_weather`, `search_web`, `get_time` | Blocked. Hosted as MCP servers on `*.hf.space`, which the web gateway answers with `403 URLBlocked`. |
+| Emotion sound effects (84 `.ogg`) | Blocked with `403` on the CDN. `prefetch-models.sh` skips them, so emotions play as movement without audio. |
+
+When a tool fails, the model narrates it in the first person — "my internet seems down" —
+which reads like a diagnosis but is just the tool error paraphrased. Check the logs for
+`URLBlocked` before believing it.
+
 ### Notes
 
 The installed CLI has **no `serve` subcommand**, despite what the upstream README shows;

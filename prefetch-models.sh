@@ -1,11 +1,13 @@
 #!/usr/bin/env bash
 #
-# Pre-download the VAD/STT/TTS weights speech-to-speech needs at startup.
+# Pre-download everything fetched from the Hugging Face Hub at runtime: the
+# speech-to-speech VAD/STT/TTS weights, plus the emotion and dance libraries the
+# conversation app's play_emotion and dance tools pull on first use.
 #
-# Optional on an unrestricted network (the server fetches them itself), but
-# behind the proxy the fetch is slow and occasionally stalls, and a stall during
-# startup kills the server. Downloading up front is resumable and idempotent:
-# re-run it until it reports OK for everything.
+# Optional on an unrestricted network (both are fetched on demand), but behind
+# the proxy those fetches are slow and occasionally stall, and a stall is fatal
+# mid-conversation. Downloading up front is resumable and idempotent: re-run it
+# until it reports OK for everything.
 #
 set -euo pipefail
 cd "$(dirname "$0")"
@@ -23,27 +25,43 @@ ATTEMPTS="${ATTEMPTS:-5}"
 export HF_HUB_ETAG_TIMEOUT="${HF_HUB_ETAG_TIMEOUT:-60}"
 export HF_HUB_DOWNLOAD_TIMEOUT="${HF_HUB_DOWNLOAD_TIMEOUT:-120}"
 
-exec "./$VENV/bin/python" - "$ATTEMPTS" <<'PY'
+# One connection at a time. snapshot_download defaults to 8 parallel workers,
+# which the proxy rate-limits into a mix of 403s, 502s and dropped connections
+# on repos with many files (the emotions library has 172).
+WORKERS="${WORKERS:-1}"
+
+exec "./$VENV/bin/python" - "$ATTEMPTS" "$WORKERS" <<'PY'
 import sys, time
 from huggingface_hub import hf_hub_download, snapshot_download
 
-attempts = int(sys.argv[1])
+attempts, workers = int(sys.argv[1]), int(sys.argv[2])
 
-# (label, repo, filename or None for whole snapshot)
+# (label, repo, filename or None for the whole snapshot, repo_type, allow_patterns)
 TARGETS = [
-    ("VAD  Smart Turn v3", "pipecat-ai/smart-turn-v3", "smart-turn-v3.2-cpu.onnx"),
-    ("STT  Parakeet TDT",  "mlx-community/parakeet-tdt-0.6b-v3", None),
-    ("TTS  Qwen3-TTS",     "mlx-community/Qwen3-TTS-12Hz-1.7B-CustomVoice-6bit", None),
+    ("VAD      Smart Turn v3", "pipecat-ai/smart-turn-v3",
+     "smart-turn-v3.2-cpu.onnx", "model", None),
+    ("STT      Parakeet TDT", "mlx-community/parakeet-tdt-0.6b-v3",
+     None, "model", None),
+    ("TTS      Qwen3-TTS", "mlx-community/Qwen3-TTS-12Hz-1.7B-CustomVoice-6bit",
+     None, "model", None),
+    # Motion files only. The 84 .ogg sound effects are served from a CDN path the
+    # proxy blocks with a 403; the emotions still play, just silently. Drop the
+    # allow_patterns on an unrestricted network to get the audio too.
+    ("EMOTION  library", "pollen-robotics/reachy-mini-emotions-library",
+     None, "dataset", ["*.json", "*.jsonl", "*.md", ".gitattributes"]),
+    ("DANCE    library", "pollen-robotics/reachy-mini-dances-library",
+     None, "dataset", None),
 ]
 
 failed = []
-for label, repo, filename in TARGETS:
+for label, repo, filename, repo_type, allow in TARGETS:
     for attempt in range(1, attempts + 1):
         try:
             if filename:
-                hf_hub_download(repo, filename)
+                hf_hub_download(repo, filename, repo_type=repo_type)
             else:
-                snapshot_download(repo)
+                snapshot_download(repo, repo_type=repo_type,
+                                  max_workers=workers, allow_patterns=allow)
             print(f"OK    {label}  ({repo})", flush=True)
             break
         except Exception as exc:
@@ -59,5 +77,5 @@ for label, repo, filename in TARGETS:
 if failed:
     print(f"\n{len(failed)} incomplete. Re-run to resume: " + ", ".join(failed))
     sys.exit(1)
-print("\nAll weights cached. Start the server: ./run-local-backend.sh")
+print("\nAll assets cached. Start the server: ./run-local-backend.sh")
 PY
