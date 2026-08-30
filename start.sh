@@ -89,8 +89,23 @@ fi
 
 # --- 3. daemon --------------------------------------------------------------
 step "Daemon (simulator)"
+# Idempotency has to compare *mode*, not just the port. A daemon left running
+# from an earlier --headless run has no viewer, and silently reusing it means
+# asking for the simulator and getting nothing.
+running_headless() {
+    ps -eo command 2>/dev/null | grep "reachy_mini.daemon.app.main" | grep -v grep | grep -q -- "--headless"
+}
+if up 8000 && [ "$HEADLESS" = "0" ] && running_headless; then
+    warn "a headless daemon is already running; restarting it with the viewer"
+    pkill -f "reachy_mini.daemon.app.main" 2>/dev/null
+    for _ in 1 2 3 4 5 6 7 8; do up 8000 || break; sleep 1; done
+    up 8000 && pkill -9 -f "reachy_mini.daemon.app.main" 2>/dev/null
+    sleep 2
+fi
 if up 8000; then
-    ok "already running on :8000"
+    if [ "$HEADLESS" = "1" ] || ! running_headless; then
+        ok "already running on :8000"
+    fi
 else
     [ -x ./reachy_mini_env/bin/mjpython ] || die "reachy_mini_env missing. Run ./setup.sh first."
     if [ "$HEADLESS" = "1" ]; then
