@@ -46,15 +46,12 @@ Full sequence on a new machine with internet access:
 cp .env.example .env                               # 4. point the app at the local backend
 cp local-backend.conf.example local-backend.conf   # 5. LLM settings (defaults to oMLX)
 
-./run-llm-server.sh                                # terminal A: LLM server
-                                                   #   (or: brew services start omlx)
-./run-local-backend.sh                             # terminal B: realtime server
-./reachy_mini_env/bin/mjpython -m reachy_mini.daemon.app.main --sim --desktop-app-daemon  # terminal C
-./install-app.sh                                   # terminal D: install the app (daemon must be up)
-curl -X POST http://127.0.0.1:8000/api/apps/start-app/reachy_mini_conversation_app
+./start.sh                                         # 6. brings the whole stack up
+./install-app.sh                                   # 7. once, to install the app
 ```
 
-Start order matters: the LLM server before the realtime server, and both before the app.
+`install-app.sh` needs the daemon running, so run it after the first `./start.sh`. From
+then on `./start.sh` alone is enough — it handles start order and health-waits for you.
 
 Machine-specific files (`.env`, `local-backend.conf`) are gitignored; copy them from the
 `.example` versions. Skip steps 2, 3 and 5 to use the hosted Hugging Face backend instead;
@@ -97,6 +94,34 @@ mv reachy_mini_env/lib/python3.12/site-packages/gstreamer_python/lib/gstreamer-1
 
 ## Running
 
+One command brings the whole stack up in the right order, waiting on each
+component's health rather than sleeping:
+
+```bash
+./start.sh              # simulator with the MuJoCo viewer
+./start.sh --headless   # no viewer (saves the ~200% CPU camera feed)
+./start.sh --cloud      # hosted Hugging Face backend; skips oMLX and speech-to-speech
+./stop.sh               # stop app, daemon, realtime server
+./stop.sh --all         # also stop oMLX
+```
+
+Cold start measured at **25 s** with models already cached. It is idempotent —
+anything already running is left alone — and logs land in `logs/`.
+
+**Click to start.** `Reachy Mini.command` and `Stop Reachy Mini.command` are
+double-clickable in Finder (macOS runs `.command` files in Terminal). Drag them to the
+Dock if you want them there. The start one opens the conversation UI when it is ready;
+closing its window does **not** stop the servers.
+
+Two details the script handles that are easy to get wrong by hand: the realtime server
+exits immediately if no LLM is listening yet, and the app reports `state: running` before
+it has connected to that realtime backend — so the launcher polls for the socket rather
+than trusting the status.
+
+<details>
+<summary>Starting the components by hand</summary>
+
+
 ```bash
 source reachy_mini_env/bin/activate
 mjpython -m reachy_mini.daemon.app.main --sim
@@ -120,6 +145,8 @@ uvicorn.error - INFO - Uvicorn running on http://127.0.0.1:8000
 
 Then verify with `python hello_sim.py` — the head should tilt and rise and the antennas
 wiggle in the viewer.
+
+</details>
 
 ## Notes
 

@@ -28,3 +28,6 @@ proxy.env
 
 # Generated CA bundle (machine-specific; rebuild with ./make-ca-bundle.sh)
 certs/
+
+# Launcher logs
+logs/
