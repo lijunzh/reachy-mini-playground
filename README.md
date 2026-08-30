@@ -366,8 +366,10 @@ reasoning, taking 15.2 s** before the first spoken word. The flag is left in
 `run-local-backend.sh` because it costs nothing and works against vLLM-style servers, but
 do not rely on it with LM Studio.
 
-Watch `Qwen3-TTS RTF` in the logs. Above 1.0 means synthesis is slower than realtime and
-replies will lag; STT and TTS share an MLX lock and compete with the LLM for the GPU.
+Watch `Qwen3-TTS RTF` in the logs. It is audio duration divided by generation time, so
+**higher is better** and below 1.0 means synthesis is slower than realtime. Measured here:
+3.88-3.93, i.e. about 4x faster than realtime. STT and TTS share an MLX lock and compete
+with the LLM for the GPU, so this drops under contention.
 
 ### Troubleshooting: Reachy never answers
 
@@ -395,6 +397,40 @@ Fixes, most effective first:
 3. Raise the VAD threshold (`--thresh`) so ambient noise stops reopening turns.
 4. Verify the model is not the bottleneck by calling it directly at your real context
    size; if a single request takes >5 s, no amount of VAD tuning will help.
+
+### Measured resource profile
+
+Real conversation, 208 samples at 1 Hz, with oMLX serving `Qwen3-Coder-Next-MLX-4bit`:
+
+| Component | CPU median | CPU p95 | RSS |
+| --- | --- | --- | --- |
+| daemon (simulator) | **198.7%** | 206.0% | 1.92 GB |
+| speech-to-speech | 3.6% | 110.1% | 5.51 GB |
+| oMLX | 0.3% | 71.9% | 42.6 GB |
+| conversation app | 8.7% | 11.3% | 0.19 GB |
+
+Per stage: STT 0.029-0.047 s, TTS time-to-first-audio 0.10 s, RTF 3.88-3.93, context
+7,078-7,561 tokens per turn, zero turn cancellations.
+
+Three things worth knowing:
+
+- **The simulator is the biggest CPU consumer**, not the AI stack — ~200% constant whether
+  or not anyone is talking. That is the uncompressed camera feed described under Notes.
+  `--headless` removes it.
+- **oMLX and speech-to-speech are near-idle between turns** (0.3% and 3.6% median) and
+  spike to roughly one core each while generating. Both preallocate memory: neither RSS
+  moved at all across the session.
+- **oMLX's 42.6 GB is preallocation**, driven by `max_model_len` (262,144 tokens for this
+  model) plus the hot cache, not by working set. The model itself is ~17 GB at 4-bit. Cap
+  the context in `~/.omlx/settings.json` if you need the memory back.
+
+### The assistant cannot read web pages
+
+Only `search_web` exists, and it returns `{title, snippet, url}` — search results, not page
+content. There is no fetch, browse, or open-url tool, so the model correctly answers "I
+can't open web pages directly, but I can copy the link for you". This is a missing
+capability in the app's tool inventory, not an LLM or server problem; tool calls
+themselves succeed. Adding an MCP Tool Space that fetches page text would close it.
 
 ## Apps
 
