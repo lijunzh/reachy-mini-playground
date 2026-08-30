@@ -424,6 +424,47 @@ Three things worth knowing:
   model) plus the hot cache, not by working set. The model itself is ~17 GB at 4-bit. Cap
   the context in `~/.omlx/settings.json` if you need the memory back.
 
+### Custom tools (no fork needed)
+
+The app loads external tool modules at runtime, so capabilities can be added from this
+repo without forking it:
+
+```bash
+REACHY_MINI_EXTERNAL_TOOLS_DIRECTORY=./tools    # in .env
+AUTOLOAD_EXTERNAL_TOOLS=true
+```
+
+Any `*.py` in that directory whose name is a valid identifier is imported; the module
+name is the tool name. A tool is one class -- see `tools/fetch_url.py`, or upstream's
+`external_content/external_tools/starter_custom_tool.py` template:
+
+```python
+class MyTool(Tool):
+    name = "my_tool"
+    description = "..."            # the model reads this to decide when to call it
+    parameters_schema = {...}      # JSON schema
+    async def __call__(self, deps: ToolDependencies, **kwargs) -> dict[str, Any]: ...
+```
+
+`deps` carries the robot handle, so motion-type actions are possible too. Prefer this
+over forking: the realtime plumbing, audio pipeline, VAD and UI are all things you would
+inherit and have to rebase forever, and none of them is what a new capability needs.
+
+#### `tools/fetch_url.py`
+
+Fetches a page and returns readable text, closing the gap below. It uses only `httpx`
+(already an app dependency) and the standard library, so it adds nothing that could
+collide with the app's own pins -- the failure mode that `mcp 2.x` caused.
+
+It refuses loopback and private addresses, resolving DNS first and re-checking after
+redirects. That matters here: the tool runs on the same host as the Reachy daemon on
+`:8000`, which can drive the robot, plus the LLM server and anything else local. A model
+can be steered into requesting a URL by a prompt-injecting page, so local services are
+not reachable through it by design.
+
+Verified end to end: the module is discovered, appears in the tool list offered to the
+model, and the model calls it with sensible arguments when asked to read a page.
+
 ### The assistant cannot read web pages
 
 Only `search_web` exists, and it returns `{title, snippet, url}` — search results, not page
