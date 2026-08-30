@@ -100,6 +100,24 @@ fi
 
 # --- 4. conversation app ----------------------------------------------------
 step "Conversation app"
+
+# Install on first run rather than making the user notice a missing app and go
+# read the setup docs. install-app.sh needs the daemon, which is now up.
+installed() {
+    curl -s -m 15 "http://127.0.0.1:8000/api/apps/list-available/installed" 2>/dev/null \
+        | grep -q "\"name\":\"$APP_NAME\""
+}
+if ! installed; then
+    warn "$APP_NAME is not installed yet"
+    [ -x ./install-app.sh ] || die "install-app.sh missing"
+    echo "    installing (several minutes; apps_venv is ~1.3 GB)"
+    if ! ./install-app.sh > "$LOGS/install-app.log" 2>&1; then
+        die "install failed. See $LOGS/install-app.log"
+    fi
+    installed || die "install reported success but the app is not listed. See $LOGS/install-app.log"
+    ok "installed"
+fi
+
 state() {
     curl -s -m 5 http://127.0.0.1:8000/api/apps/current-app-status 2>/dev/null \
         | sed -n 's/.*"state":"\([a-z]*\)".*/\1/p'

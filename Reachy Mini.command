@@ -14,7 +14,10 @@ cd "$(dirname "$0")" || exit 1
 
 # Only when attached to a terminal; avoids noise if run non-interactively.
 [ -t 1 ] && clear
-./start.sh --headless
+# With the viewer: this is the desktop-robot experience, and seeing Reachy move
+# is the point of double-clicking it. Costs ~200% CPU for the simulated camera
+# feed -- run ./start.sh --headless from a terminal if you want that back.
+./start.sh
 status=$?
 
 if [ "$status" -ne 0 ]; then

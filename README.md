@@ -46,12 +46,12 @@ Full sequence on a new machine with internet access:
 cp .env.example .env                               # 4. point the app at the local backend
 cp local-backend.conf.example local-backend.conf   # 5. LLM settings (defaults to oMLX)
 
-./start.sh                                         # 6. brings the whole stack up
-./install-app.sh                                   # 7. once, to install the app
+./start.sh                                         # 6. brings up the stack, installs
+                                                   #    the app on first run
 ```
 
-`install-app.sh` needs the daemon running, so run it after the first `./start.sh`. From
-then on `./start.sh` alone is enough — it handles start order and health-waits for you.
+`./start.sh` installs the conversation app on first run if it is missing, so there is no
+separate install step. It handles start order and health-waits for you.
 
 Machine-specific files (`.env`, `local-backend.conf`) are gitignored; copy them from the
 `.example` versions. Skip steps 2, 3 and 5 to use the hosted Hugging Face backend instead;
@@ -110,8 +110,12 @@ anything already running is left alone — and logs land in `logs/`.
 
 **Click to start.** `Reachy Mini.command` and `Stop Reachy Mini.command` are
 double-clickable in Finder (macOS runs `.command` files in Terminal). Drag them to the
-Dock if you want them there. The start one opens the conversation UI when it is ready;
-closing its window does **not** stop the servers.
+Dock if you want them there. The start one brings up the viewer, opens the conversation UI
+when it is ready, and installs the app if this is the first run; closing its window does
+**not** stop the servers.
+
+On first run it will take several minutes — it installs the app (~1.3 GB) — and the
+progress is in `logs/install-app.log`.
 
 Two details the script handles that are easy to get wrong by hand: the realtime server
 exits immediately if no LLM is listening yet, and the app reports `state: running` before
