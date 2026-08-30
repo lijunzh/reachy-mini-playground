@@ -36,14 +36,15 @@ fi
 cat <<EOF
 
 ------------------------------------------------------------------
-Reachy Mini is running. The conversation UI should have opened.
+Reachy Mini is running. The conversation UI should have opened, and
+the simulator has its own Terminal window showing the robot.
 
   stop it      : double-click "Stop Reachy Mini.command"
                  or run ./stop.sh in this directory
   logs         : $(pwd)/logs/
 
-Closing this window does NOT stop Reachy -- the servers keep running
-in the background. Use the stop command above.
+Leave the simulator's window open -- closing it stops the robot.
+This window can be closed once everything is up.
 ------------------------------------------------------------------
 
 Press return to close this window.

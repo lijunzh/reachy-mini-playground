@@ -20,10 +20,11 @@ APP_NAME="reachy_mini_conversation_app"
 LOGS="logs"
 DAEMON_ARGS="--sim --desktop-app-daemon"
 CLOUD=0
+HEADLESS=0
 
 for arg in "$@"; do
     case "$arg" in
-        --headless) DAEMON_ARGS="$DAEMON_ARGS --headless" ;;
+        --headless) DAEMON_ARGS="$DAEMON_ARGS --headless"; HEADLESS=1 ;;
         --cloud)    CLOUD=1 ;;
         -h|--help)  sed -n '3,16p' "$0" | sed 's/^# \{0,1\}//'; exit 0 ;;
         *)          echo "unknown option: $arg (try --help)" >&2; exit 2 ;;
@@ -91,9 +92,27 @@ if up 8000; then
     ok "already running on :8000"
 else
     [ -x ./reachy_mini_env/bin/mjpython ] || die "reachy_mini_env missing. Run ./setup.sh first."
-    # shellcheck disable=SC2086
-    nohup ./reachy_mini_env/bin/mjpython -m reachy_mini.daemon.app.main $DAEMON_ARGS \
-        > "$LOGS/daemon.log" 2>&1 &
+    if [ "$HEADLESS" = "1" ]; then
+        # shellcheck disable=SC2086
+        nohup ./reachy_mini_env/bin/mjpython -m reachy_mini.daemon.app.main $DAEMON_ARGS \
+            > "$LOGS/daemon.log" 2>&1 &
+    else
+        # mjpython needs the main thread of a real session to own the MuJoCo
+        # window. Backgrounded with `nohup ... &` the daemon still serves, but
+        # no viewer ever appears -- and it dies when the launching window
+        # closes. Give it its own Terminal window so the viewer works and it
+        # outlives this script.
+        echo "    opening a Terminal window for the viewer"
+        osascript >/dev/null 2>&1 <<OSA
+tell application "Terminal"
+    do script "cd $(pwd | sed 's/"/\\"/g') && ./reachy_mini_env/bin/mjpython -m reachy_mini.daemon.app.main $DAEMON_ARGS 2>&1 | tee $LOGS/daemon.log"
+    activate
+end tell
+OSA
+        [ $? -ne 0 ] && die "could not open a Terminal window for the daemon.
+Run it yourself in a terminal:
+    ./reachy_mini_env/bin/mjpython -m reachy_mini.daemon.app.main $DAEMON_ARGS"
+    fi
     # GStreamer rescans its plugin registry in-process on every launch.
     wait_for 8000 240 "daemon" "$LOGS/daemon.log"
 fi

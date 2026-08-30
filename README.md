@@ -117,10 +117,16 @@ when it is ready, and installs the app if this is the first run; closing its win
 On first run it will take several minutes — it installs the app (~1.3 GB) — and the
 progress is in `logs/install-app.log`.
 
-Two details the script handles that are easy to get wrong by hand: the realtime server
-exits immediately if no LLM is listening yet, and the app reports `state: running` before
-it has connected to that realtime backend — so the launcher polls for the socket rather
-than trusting the status.
+Three details the script handles that are easy to get wrong by hand:
+
+- The realtime server exits immediately if no LLM is listening yet.
+- The app reports `state: running` before it has connected to that realtime backend, so
+  the launcher polls for the socket rather than trusting the status.
+- **The viewer needs a foreground session.** `mjpython` must own the main thread to hold
+  the MuJoCo window, so a backgrounded daemon serves fine but never shows a robot — and
+  dies when the launching window closes. With a viewer, `start.sh` opens a dedicated
+  Terminal window for the daemon; `--headless` backgrounds it as normal. Leave that window
+  open: closing it stops the robot.
 
 <details>
 <summary>Starting the components by hand</summary>
