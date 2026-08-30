@@ -392,10 +392,22 @@ prompt:
 ./reachy_mini_env/bin/python bench-llm.py "omlx" http://127.0.0.1:8123/v1 <model-id> --chat
 ```
 
-**Use a non-reasoning (instruct) model.** This matters more than any flag.
-`--responses_api_disable_thinking` sends `chat_template_kwargs.enable_thinking=false`,
-which vLLM honours but **LM Studio's llama.cpp backend ignores**. Measured against
-LM Studio with `qwen/qwen3.8-27b`:
+**Disabling thinking works on oMLX, not on LM Studio.**
+`--responses_api_disable_thinking` sends `chat_template_kwargs.enable_thinking=false`.
+oMLX honours it; LM Studio's llama.cpp backend ignores it. Same model
+(`Qwen3.8-27B`), one spoken turn:
+
+| Server | request | time | reasoning |
+| --- | --- | --- | --- |
+| **oMLX** | `enable_thinking=false` | **1.5 s** | **0 chars** |
+| oMLX | baseline | 7.4 s | 315 chars |
+| oMLX | `reasoning_effort=none` | 4.1 s | 239 chars — wrong lever |
+
+So a reasoning model is usable here after all, provided oMLX serves it: roughly 5x faster
+per turn with thinking off. `reasoning_effort` is not the knob; `enable_thinking` is.
+
+The LM Studio measurements below are what motivated preferring an instruct model, and
+still apply if you use LM Studio:
 
 | Request | reasoning tokens |
 | --- | --- |
