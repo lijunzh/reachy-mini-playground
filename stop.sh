@@ -125,6 +125,21 @@ step "Conversation UI tab"
 for browser in Safari "Google Chrome"; do close_ui_tab "$browser"; done
 ok "closed any tab pointing at :7860"
 
+# Close the simulator's Terminal window, which otherwise lingers at a dead
+# prompt. Matched by the custom title start.sh set, never by position or
+# contents -- one of the other Terminal windows is running this script.
+step "Simulator window"
+osascript >/dev/null 2>&1 <<'OSA'
+tell application "Terminal"
+    repeat with i from (count of windows) to 1 by -1
+        try
+            if custom title of window i is "Reachy Mini Simulator" then close window i
+        end try
+    end repeat
+end tell
+OSA
+ok "closed the simulator window if it was open"
+
 echo
 printf '\033[1m%s\033[0m\n' "Ports"
 for spec in "8000:daemon" "7860:app UI" "8765:realtime" "8123:oMLX"; do

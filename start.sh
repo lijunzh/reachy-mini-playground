@@ -17,6 +17,7 @@ set -uo pipefail
 cd "$(dirname "$0")"
 
 APP_NAME="reachy_mini_conversation_app"
+SIM_WINDOW_TITLE="Reachy Mini Simulator"
 LOGS="logs"
 DAEMON_ARGS="--sim --desktop-app-daemon"
 CLOUD=0
@@ -103,9 +104,14 @@ else
         # closes. Give it its own Terminal window so the viewer works and it
         # outlives this script.
         echo "    opening a Terminal window for the viewer"
+        # Tag the window so stop.sh can close exactly this one later, rather
+        # than guessing at Terminal windows -- one of which is running stop.sh.
         osascript >/dev/null 2>&1 <<OSA
 tell application "Terminal"
-    do script "cd $(pwd | sed 's/"/\\"/g') && ./reachy_mini_env/bin/mjpython -m reachy_mini.daemon.app.main $DAEMON_ARGS 2>&1 | tee $LOGS/daemon.log"
+    set t to do script "cd $(pwd | sed 's/"/\\"/g') && ./reachy_mini_env/bin/mjpython -m reachy_mini.daemon.app.main $DAEMON_ARGS 2>&1 | tee $LOGS/daemon.log"
+    try
+        set custom title of (first window whose tabs contains t) to "$SIM_WINDOW_TITLE"
+    end try
     activate
 end tell
 OSA
