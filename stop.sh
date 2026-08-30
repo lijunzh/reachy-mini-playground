@@ -86,6 +86,45 @@ if [ "$ALL" = "1" ]; then
     stop_port 8123 "oMLX"
 fi
 
+# The launcher opened a browser tab; close it so a dead page is not left behind.
+# Deliberately narrow: only tabs whose URL is the conversation UI, only in
+# browsers that are already running, and never fatal -- a browser that is not
+# scriptable, or has not been granted Automation permission, is not an error.
+close_ui_tab() {
+    local app=$1
+    osascript >/dev/null 2>&1 <<OSA
+tell application "System Events"
+    if not (exists process "$app") then return
+end tell
+tell application "$app"
+    -- Iterate backwards: closing a window while walking forwards skips entries.
+    repeat with i from (count of windows) to 1 by -1
+        set w to window i
+        set ours to {}
+        repeat with t in (tabs of w)
+            if (URL of t contains "127.0.0.1:7860") or (URL of t contains "localhost:7860") then
+                set end of ours to t
+            end if
+        end repeat
+        if (count of ours) is 0 then
+            -- nothing of ours here; leave the window alone
+        else if (count of ours) is (count of tabs of w) then
+            -- the whole window is ours; close it rather than leaving it empty
+            close w
+        else
+            repeat with t in ours
+                close t
+            end repeat
+        end if
+    end repeat
+end tell
+OSA
+}
+
+step "Conversation UI tab"
+for browser in Safari "Google Chrome"; do close_ui_tab "$browser"; done
+ok "closed any tab pointing at :7860"
+
 echo
 printf '\033[1m%s\033[0m\n' "Ports"
 for spec in "8000:daemon" "7860:app UI" "8765:realtime" "8123:oMLX"; do

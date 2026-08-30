@@ -97,6 +97,10 @@ mv reachy_mini_env/lib/python3.12/site-packages/gstreamer_python/lib/gstreamer-1
 One command brings the whole stack up in the right order, waiting on each
 component's health rather than sleeping:
 
+`./stop.sh` also closes the browser tab the launcher opened, so a dead page is not left
+behind. It matches only `:7860` tabs, closes the window only when that is all it held, and
+leaves every other tab alone.
+
 ```bash
 ./start.sh              # simulator with the MuJoCo viewer
 ./start.sh --headless   # no viewer (saves the ~200% CPU camera feed)
